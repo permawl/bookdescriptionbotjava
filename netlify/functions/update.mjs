@@ -49,8 +49,9 @@ async function searchGoodreads(query, limit = 5) {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!resp.ok) throw new Error("HTTP " + resp.status);
+  if (!resp.ok) throw new Error("HTTP " + resp.status);
     const $ = cheerio.load(await resp.text());
+    console.log("GR status:", resp.status, "title:", $("title").text().trim(), "len:", $.html().length, "bookTitle links:", $("a.bookTitle").length);
     const results = [];
     $("a.bookTitle")
       .slice(0, limit)
