@@ -11,7 +11,9 @@ async function tg(method, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return r.json();
+  const j = await r.json();
+  if (!j.ok) throw new Error(`${method}: ${j.description}`);
+  return j;
 }
 
 async function fetchDescription(bookUrl) {
@@ -47,7 +49,7 @@ async function searchGoodreads(query, limit = 5) {
       headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
       signal: AbortSignal.timeout(8000),
     });
-    if (!resp.ok) throw new Error(resp.status);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
     const $ = cheerio.load(await resp.text());
     const results = [];
     $("a.bookTitle")
@@ -64,6 +66,7 @@ async function searchGoodreads(query, limit = 5) {
           url: "https://www.goodreads.com" + href,
         });
       });
+    console.log(`Found ${results.length} Goodreads results for '${query}'`);
     return results;
   } catch (e) {
     console.error("Search request failed:", e.message);
@@ -164,14 +167,24 @@ async function handleCallback(cb) {
   });
 }
 
+async function reportError(chatId, e) {
+  console.error("Handler error:", e);
+  if (!chatId) return;
+  try {
+    await tg("sendMessage", { chat_id: chatId, text: "Error: " + e.message });
+  } catch (_) {}
+}
+
 export default async (req) => {
   if (req.method !== "POST") return new Response("ok");
+  let chatId = null;
   try {
     const update = await req.json();
     if (update.callback_query) {
+      chatId = update.callback_query.message?.chat?.id;
       await handleCallback(update.callback_query);
     } else if (update.message?.text) {
-      const chatId = update.message.chat.id;
+      chatId = update.message.chat.id;
       const text = update.message.text.trim();
       const m = text.match(/^\/(\w+)(?:@\w+)?\s*(.*)$/s);
       if (m) {
@@ -181,7 +194,7 @@ export default async (req) => {
       }
     }
   } catch (e) {
-    console.error(e);
+    await reportError(chatId, e);
   }
   return new Response("ok", { status: 200 });
 };
